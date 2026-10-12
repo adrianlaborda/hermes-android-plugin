@@ -1,0 +1,18 @@
+name: hermes-android
+label: Hermes Android
+kind: platform
+version: 0.5.0
+description: Durable Android device inbox and BYO Firebase HTTP v1 delivery for Hermes.
+optional_env:
+  - name: HERMES_ANDROID_RPC_SECRET
+    description: Dedicated pairing secret (at least 32 characters), shared only with your mobile app
+    prompt: Plugin pairing secret
+    password: true
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    description: Server-side Firebase service-account JSON path (legacy fallback only)
+    prompt: Firebase service-account JSON path
+    password: true
+  - name: HERMES_ANDROID_HOME_CHANNEL
+    description: Cron target value, normally home
+    prompt: Hermes Android cron target
+    password: false

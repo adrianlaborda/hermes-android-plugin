@@ -1,0 +1,93 @@
+import json
+import os
+
+import pytest
+from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+
+from hermes_android import hooks, setup
+from hermes_android.store import DeviceStore
+
+KEY = {"type": "service_account", "project_id": "demo-proj", "client_email": "sender@demo-proj.iam.gserviceaccount.com",
+       "private_key": "-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"}
+
+
+@pytest.fixture
+def home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    monkeypatch.delenv("HERMES_ANDROID_RPC_SECRET", raising=False)
+    token = set_hermes_home_override(str(tmp_path))
+    try:
+        yield tmp_path
+    finally:
+        reset_hermes_home_override(token)
+
+
+@pytest.fixture
+def pushed(monkeypatch):
+    sent = []
+    monkeypatch.setattr(hooks, "_push_soon", lambda ids: sent.extend(ids))
+    monkeypatch.setattr(hooks, "_turn_summary", lambda sid: ("Plan the trip", "Here is the itinerary…"))
+    return sent
+
+
+def _device():
+    return DeviceStore().register(device_id=None, device_secret=None, label="p", push_type="fcm", push_token="t")
+
+
+def test_turn_notice_carries_chat_title_and_excerpt(home, pushed):
+    device = _device()
+    hooks.on_session_end(session_id="s1", turn_id="t1", completed=True, platform="api_server")
+    event = DeviceStore().pending(device["device_id"], device["device_secret"])[0]
+    assert (event["title"], event["body"], event["session_id"]) == ("Plan the trip", "Here is the itinerary…", "s1")
+    assert pushed == [event["event_id"]]
+
+
+def _set(key, value, home):
+    from hermes_cli.config import set_config_value
+    set_config_value(key, value)
+    # Config readers cache by mtime; two writes within one test can share a timestamp.
+    config = home / "config.yaml"
+    stamp = os.stat(config).st_mtime_ns + 2_000_000_000
+    os.utime(config, ns=(stamp, stamp))
+
+
+def test_messaging_turns_stay_quiet_unless_configured(home, pushed):
+    device = _device()
+    hooks.on_session_end(session_id="s1", turn_id="t1", completed=True, platform="telegram")
+    assert DeviceStore().pending(device["device_id"], device["device_secret"]) == []
+    _set("platforms.hermes_android.notify_turns", "all", home)
+    hooks.on_session_end(session_id="s1", turn_id="t2", completed=True, platform="telegram")
+    assert len(DeviceStore().pending(device["device_id"], device["device_secret"])) == 1
+    _set("platforms.hermes_android.notify_turns", "never", home)
+    hooks.on_session_end(session_id="s1", turn_id="t3", completed=True, platform="api_server")
+    assert len(DeviceStore().pending(device["device_id"], device["device_secret"])) == 1
+
+
+def test_excerpt_drops_markup():
+    assert hooks._plain("**Done** ✅\n```py\nx=1\n```\nSee [the docs](http://x) ![img](a.png)") == "Done ✅ See the docs"
+
+
+def test_enable_profile_plans_then_applies_with_shared_key(home):
+    (home / "profiles" / "work").mkdir(parents=True)
+    (home / "profiles" / "work" / "config.yaml").write_text("model: {}\n")
+    setup.configure()
+    setup.install_credentials_json(KEY)
+    plan = setup.enable_for_profile("work")
+    assert plan["dry_run"] and any("copy plugin" in step for step in plan["plan"])
+    assert not (home / "profiles" / "work" / "plugins" / "hermes-android").exists()
+    done = setup.enable_for_profile("work", apply=True)
+    work = home / "profiles" / "work"
+    assert (work / "plugins" / "hermes-android" / "plugin.yaml").exists()
+    assert done["now"]["plugin_enabled"] and done["now"]["platform_enabled"]
+    assert done["now"]["pairing_secret"] == "ok" and done["now"]["server_key"] == "ok"
+    assert "HERMES_ANDROID_RPC_SECRET=" in (work / ".env").read_text()
+    # The work profile gets its own secret, not the default one.
+    default_secret = (home / ".env").read_text().split("HERMES_ANDROID_RPC_SECRET=")[1].splitlines()[0]
+    assert default_secret not in (work / ".env").read_text()
+    names = [row["profile"] for row in setup.profiles_overview()["profiles"]]
+    assert names[:1] == ["default"] and "work" in names
+
+
+def test_unknown_profile_is_refused(home):
+    with pytest.raises(ValueError):
+        setup.enable_for_profile("ghost")
