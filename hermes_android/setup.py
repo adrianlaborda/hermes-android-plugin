@@ -94,7 +94,32 @@ def _platform_config():
 
 
 def _api_server() -> dict[str, Any]:
-    """Whether the official API server (which carries the plugin's HTTP route) is on, and where."""
+    """The API server that carries this profile's plugin route. With ``gateway.multiplex_profiles`` one
+    gateway serves every profile and the launch profile's listener routes ``/p/<profile>/...`` to each
+    profile's adapter, so a secondary profile without its own API server uses that shared one."""
+    own = _api_server_here()
+    if own["enabled"]:
+        return own
+    try:
+        from hermes_cli.config import load_config
+        from hermes_constants import get_default_hermes_root, reset_hermes_home_override, set_hermes_home_override
+        root = Path(get_default_hermes_root())
+        if root.resolve() == _home().resolve():
+            return own
+        token = set_hermes_home_override(str(root))
+        try:
+            if not ((load_config() or {}).get("gateway") or {}).get("multiplex_profiles"):
+                return own
+            shared = _api_server_here()
+        finally:
+            reset_hermes_home_override(token)
+    except Exception:
+        return own
+    return {**shared, "shared": True} if shared["enabled"] else own
+
+
+def _api_server_here() -> dict[str, Any]:
+    """Whether this profile's own API server (which carries the plugin's HTTP route) is on, and where."""
     try:
         from gateway.config import Platform, load_gateway_config
         cfg = load_gateway_config().platforms.get(Platform.API_SERVER)

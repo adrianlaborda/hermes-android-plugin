@@ -139,6 +139,17 @@ def test_the_host_answers_pairing_for_other_profiles(home, monkeypatch):
     assert setup.pairing_for("")["profile"] == "default"
 
 
+def test_secondary_profiles_use_the_multiplexed_api_server(home):
+    work = home / "profiles" / "work"
+    work.mkdir(parents=True)
+    (work / "config.yaml").write_text("model: {}\n")
+    (home / ".env").write_text("API_SERVER_ENABLED=true\nAPI_SERVER_HOST=192.168.1.5\nAPI_SERVER_PORT=8650\n")
+    _set("gateway.multiplex_profiles", "true", home)
+    with setup.profile_scope("work"):
+        api = setup._api_server()
+    assert api["enabled"] and api["reachable_from_phone"] and api["port"] == 8650 and api["shared"]
+
+
 def test_enable_command_needs_a_profile(home):
     assert json.loads(tools.enable_command(""))["ok"] is False
     assert json.loads(tools.enable_command("ghost"))["ok"] is False
