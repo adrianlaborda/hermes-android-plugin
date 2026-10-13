@@ -1,0 +1,64 @@
+name: Release
+
+# Push a tag vX.Y.Z that matches the version in plugin.yaml and pyproject.toml.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check the tag matches the plugin version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          plugin="$(sed -n 's/^version: *//p' plugin.yaml)"
+          project="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)"
+          if [ "$version" != "$plugin" ] || [ "$version" != "$project" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME, plugin.yaml $plugin and pyproject.toml $project must match"
+            exit 1
+          fi
+          python3 scripts/release_notes.py "$version" > notes.md
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: f97608f178d1ffeca59860195ab7da295f7c8e5f
+          path: .upstream/hermes-agent
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Test
+        run: |
+          python -m pip install -e '.[test]' ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
+          python -m pytest tests -q
+        env:
+          HERMES_AGENT_SRC: ${{ github.workspace }}/.upstream/hermes-agent
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo
+            echo "---"
+            echo
+            echo "**Install:** \`hermes plugins install adrianlaborda/hermes-android-plugin\`, or ask Hermes to do it."
+            echo "**Update:** \`hermes plugins update hermes-android\`."
+          } >> notes.md
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "hermes-android ${GITHUB_REF_NAME#v}" --notes-file notes.md $prerelease

@@ -1,0 +1,54 @@
+name: Bug report
+description: Notifications or setup do not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Never paste secrets** here: no service-account keys, pairing secrets, API server keys or `.env` contents.
+        For a security problem, use [private vulnerability reporting](../security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: /android-status output
+      description: Run `/android-status` in a chat of the affected profile. It never prints secrets.
+      render: text
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin version
+      placeholder: 0.5.1
+    validations:
+      required: true
+  - type: input
+    id: hermes
+    attributes:
+      label: Hermes Agent version
+      description: Output of `hermes --version`.
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: Hermes Mobile version
+  - type: dropdown
+    id: profiles
+    attributes:
+      label: Profiles
+      options:
+        - Only the default profile
+        - Several profiles, multiplexed (gateway.multiplex_profiles)
+        - Several profiles, one gateway each
+  - type: textarea
+    id: logs
+    attributes:
+      label: Gateway logs
+      description: Lines mentioning hermes_android. Remove anything private first.
+      render: text

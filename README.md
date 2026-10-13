@@ -1,11 +1,20 @@
 # Hermes Android plugin
 
-Push notifications from your own [Hermes Agent](https://github.com/NousResearch/hermes-agent) to the
-**Hermes Mobile** Android app: reminders, scheduled jobs, finished turns and approval requests, delivered the way
-Telegram receives them. It is self-hosted end to end. You bring your own Firebase project, the APK contains no keys,
-and there is no relay in the middle. It installs as a normal Hermes platform plugin, with no fork or patch of Hermes core.
+[![CI](https://github.com/adrianlaborda/hermes-android-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/adrianlaborda/hermes-android-plugin/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/adrianlaborda/hermes-android-plugin?sort=semver)](https://github.com/adrianlaborda/hermes-android-plugin/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-3776AB)
 
-Version 0.5.0. It requires Hermes Agent with platform HTTP callbacks (validated on v0.21.5) and Python 3.11–3.13.
+Push notifications from your own [Hermes Agent](https://github.com/NousResearch/hermes-agent) to the
+[Hermes Mobile](https://github.com/adrianlaborda/hermes-mobile) Android app: reminders, scheduled jobs, finished turns
+and approval requests, delivered the way Telegram receives them. It is self-hosted end to end. You bring your own
+Firebase project, the APK contains no keys, and there is no relay in the middle. It installs as a normal Hermes platform
+plugin, with no fork or patch of Hermes core.
+
+> **Unofficial.** This is a community project. It is not affiliated with or endorsed by Nous Research.
+
+**Requirements:** Hermes Agent with platform HTTP callbacks (tested on v0.21.5) and Python 3.11–3.13. Changes are
+listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start: let Hermes do it
 
@@ -177,56 +186,29 @@ first two refuse to answer in messaging channels such as Telegram.
 > endpoint and secret variable. Disable the old plugin, rename `platforms.hermes_assistant` and
 > `HERMES_ASSISTANT_RPC_SECRET`, rewrite cron destinations and re-pair the phone.
 
-## Delivered events and limits
+## Limits
 
-- Completed/failed agent turns: a generic notice with the real stored session ID; tap opens that profile/session.
-- Approval: a generic inbox notice. Upstream exposes a runtime session key rather than a guaranteed stored chat ID in this hook, so no fabricated chat link is sent. Open the active chat to review the actual approval.
-- Cron/proactive sender: content available through the authenticated inbox; no inferred session link.
-- No reasoning, response text, command, title, bearer secret or device secret goes to FCM. Only opaque event ID, device ID and protocol version are sent.
-- Android displays an immediate private generic notice, then retrieves the event. The gateway may require a VPN; bounded WorkManager retries and foreground reconciliation recover deferred events without background polling.
-- Up to 3 durable push attempts, each with bounded HTTP retries; exhausted events remain in the inbox until their 7-day TTL. Acknowledgement cannot be overwritten by a late FCM result. Token rotation cannot be revoked by an error for the previous token.
-- Notifications depend on Google Play services, permission/channel settings and Android delivery conditions. A force-stopped app cannot receive until reopened. FCM delivery is not an exactly-once guarantee; stable notification IDs and event acknowledgements suppress duplicate alerts.
+- **Scheduled jobs.** The plugin adds the phone to new `cronjob` requests made through Hermes' normal tool pipeline,
+  from any surface. Jobs that already exist, and jobs created directly in the dashboard or the scheduler API, are not
+  changed. Route them with `hermes_android_route_crons`, or add `hermes_android:home` to their delivery. Explicit
+  `local` delivery stays local. Set `platforms.hermes_android.mirror_reminders: false` to stop routing new jobs.
+- **Approvals.** The hook exposes a runtime session key, not a stored chat ID, so an approval notice opens the app
+  without a chat link.
+- **Delivery.** Up to 3 push attempts, each with bounded HTTP retries. Undelivered events stay in the inbox for 7 days,
+  and the phone picks them up when the app opens. Stable notification IDs and acknowledgements suppress duplicates.
+- **Android.** Notifications depend on Google Play services, the app's permission and channel settings, and battery
+  restrictions. A force-stopped app receives nothing until it is reopened.
 
-## Validation
+## Development
 
 ```sh
-HERMES_AGENT_SRC=/path/to/official/hermes-agent python -m pytest tests -q
+pip install -e '.[test]'
+HERMES_AGENT_SRC=/path/to/hermes-agent python -m pytest tests -q
 ```
 
-Tests use synthetic devices/accounts and a local HTTP server, not real Firebase credentials. See the alpha12 delivery report for executed results. Real phone + Firebase + deployed gateway delivery still needs end-to-end testing with your configuration.
+Tests use synthetic devices and a local HTTP server, never real Firebase credentials. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-The plugin protocol and migration remain documented in [docs/protocol-v1.md](docs/protocol-v1.md). Legacy migration is explicit, never automatic.
+## License
 
-
-## Conversational reminders (0.2.1)
-
-With the platform enabled and at least one active paired device **in the same
-profile**, the official `tool_request` middleware adds `hermes_android:home`
-to new `cronjob` requests. This works for model-created reminders from Desktop,
-Mobile and other surfaces that execute Hermes' normal tool pipeline. Existing
-origin/Telegram/Discord/Bot Chat destinations remain in the delivery list.
-The scheduler still owns timing, timezone, silent responses and failures; the
-plugin adds no timer or background polling. Normal results reach the authenticated
-mobile inbox and only opaque identifiers travel via FCM.
-
-Explicit `local` remains an opt-out. `all` and existing mobile destinations are
-not expanded again; a specific device is never widened to all devices. An update
-that only changes a schedule/prompt does not overwrite the stored delivery route.
-An explicitly supplied `failure_deliver: local` stays silent. Set the boolean
-`platforms.hermes_android.mirror_reminders: false` to stop routing future requests;
-this does not rewrite already scheduled jobs. Removing the plugin requires removing
-its destinations from jobs that reference it.
-
-**Coverage boundary:** this is not a global scheduler observer. Existing jobs and
-jobs created directly through the scheduler's GUI/API bypass this middleware.
-For those, set delivery to `origin,hermes_android:home` (or append
-`,hermes_android:home` to their existing non-local destinations). No existing job
-has been silently migrated. Upstream at the validated revision has no universal
-cron-delivery plugin hook; `on_session_end` does not cover script-only jobs and the
-execution ledger does not distinguish every intentional silence from local-only
-output. A universal observer needs an upstream extension before we can promise
-all-surface automatic coverage without patching Hermes.
-
-The plugin must be installed/enabled in the profile used by Desktop, and the phone
-must be paired with that profile. Firebase configuration and a real phone delivery
-test are still required. No Android binary change is needed for protocol v1.
+[MIT](LICENSE). To report a vulnerability, see [SECURITY.md](SECURITY.md).
