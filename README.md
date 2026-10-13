@@ -124,7 +124,9 @@ which:
 - creates that profile's own pairing secret;
 - points it at the same Firebase key file.
 
-After a gateway restart, pick the profile in the app's **Notifications** screen and tap **Pair**.
+The plugin goes live without a full gateway restart: it loads in the chat backend and only that profile restarts
+inside the multiplexing gateway. In the app, the same is one tap: on a profile that is not enabled yet,
+**Notifications → Enable for this profile** runs `/android-enable <profile>` and pairs the phone.
 
 ### What gets notified
 

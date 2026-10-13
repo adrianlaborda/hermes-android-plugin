@@ -89,8 +89,12 @@ notifications for my work profile"):
    `apply=true` once the user confirms. It links the plugin (an old separate copy is replaced and kept as a
    backup) and points the profile at this profile's Firebase key, because the phone has a single Firebase
    project. Nothing has to be uploaded again.
-3. Restart the gateway (with consent).
+3. Applying brings the plugin up live: it loads in the chat backend and restarts only that profile inside the
+   multiplexing gateway, so the other profiles and their channels keep running. Restart the whole gateway
+   (with consent) only if the result says `restart_required`.
 4. In the app, the user opens **Notifications**, picks that profile at the top and taps **Pair with this server**.
+   The app can also do steps 2–4 by itself: on a profile that is not enabled, **Enable for this profile**
+   runs `/android-enable <profile>` in a profile that has the plugin, then pairs.
 5. Optionally call `hermes_android_route_crons` with `profile=<name>` to route that profile's scheduled jobs.
 
 ## What gets notified

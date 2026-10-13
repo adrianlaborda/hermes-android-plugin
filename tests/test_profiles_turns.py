@@ -4,7 +4,7 @@ import os
 import pytest
 from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
-from hermes_android import hooks, setup
+from hermes_android import hooks, setup, tools
 from hermes_android.store import DeviceStore
 
 KEY = {"type": "service_account", "project_id": "demo-proj", "client_email": "sender@demo-proj.iam.gserviceaccount.com",
@@ -116,6 +116,32 @@ def test_enable_profile_leaves_foreign_dirs_alone(home):
     (work / "config.yaml").write_text("model: {}\n")
     result = setup.enable_for_profile("work", apply=True)
     assert "error" in result and not (work / "plugins" / "hermes-android").is_symlink()
+
+
+def test_the_host_answers_pairing_for_other_profiles(home, monkeypatch):
+    work = home / "profiles" / "work"
+    work.mkdir(parents=True)
+    (work / "config.yaml").write_text("model: {}\n")
+    setup.configure()
+    setup.install_credentials_json(KEY)
+    # Not enabled there yet: the host says so and names the key the profile would share.
+    reply = setup.pairing_for("work")
+    assert reply["plugin_enabled"] is False and reply["host_profile"] == "default" and "secret" not in reply
+    assert reply["server_key"]["state"] == "ok" and reply["server_key"]["shared"] is True
+    monkeypatch.setattr(setup, "activate_profile", lambda name: {"gateway": "profile_restarted"})
+    enabled = json.loads(tools.enable_command("work"))
+    assert enabled["ok"] and enabled["restart_required"] is False
+    monkeypatch.setattr(setup, "_api_server", lambda: {"enabled": True, "host": "192.168.1.5", "port": 8642,
+                                                       "reachable_from_phone": True})
+    reply = setup.pairing_for("work")
+    work_secret = (work / ".env").read_text().split("HERMES_ANDROID_RPC_SECRET=")[1].splitlines()[0]
+    assert reply["profile"] == "work" and reply["secret"] == work_secret
+    assert setup.pairing_for("")["profile"] == "default"
+
+
+def test_enable_command_needs_a_profile(home):
+    assert json.loads(tools.enable_command(""))["ok"] is False
+    assert json.loads(tools.enable_command("ghost"))["ok"] is False
 
 
 def test_unknown_profile_is_refused(home):

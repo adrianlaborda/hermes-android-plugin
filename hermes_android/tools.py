@@ -91,10 +91,32 @@ def _is_messaging_surface() -> bool:
     return any(ident and ident not in NON_MESSAGING_SESSION_SURFACES | APP_SURFACES for ident in idents)
 
 
-def pair_command(_raw: str = "") -> str:
+def pair_command(raw: str = "") -> str:
+    """Pairing data of this profile, or of the profile named in ``raw`` (the app pairs any profile through one
+    that runs the plugin)."""
     if _is_messaging_surface():
         return "Pairing is done from the Hermes Mobile app (Notifications → Pair with this server)."
-    return json.dumps(setup.pairing_payload(), ensure_ascii=False)
+    try:
+        return json.dumps(setup.pairing_for(raw), ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+
+
+def enable_command(raw: str = "") -> str:
+    """The app's one-tap "enable for this profile": the user pressing the button is the confirmation."""
+    if _is_messaging_surface():
+        return json.dumps({"ok": False, "error": "Enable profiles from the Hermes Mobile app or ask Hermes."})
+    name = (raw or "").strip()
+    if not name:
+        return json.dumps({"ok": False, "error": "usage: /android-enable <profile>"})
+    try:
+        result = setup.enable_for_profile(name, apply=True)
+    except Exception as exc:
+        return json.dumps({"ok": False, "error": str(exc)})
+    if result.get("error"):
+        return json.dumps({"ok": False, "error": result["error"]})
+    return json.dumps({"ok": True, "profile": name, "restart_required": result["restart_required"],
+                       "done": result["done"]}, default=str)
 
 
 def credentials_command(raw: str = "") -> str:
@@ -107,9 +129,9 @@ def credentials_command(raw: str = "") -> str:
         return json.dumps({"ok": False, "error": str(exc)})
 
 
-def test_command(_raw: str = "") -> str:
+def test_command(raw: str = "") -> str:
     try:
-        return json.dumps({"ok": True, **setup.send_test()}, default=str)
+        return json.dumps({"ok": True, **setup.send_test_for(raw)}, default=str)
     except Exception as exc:
         return json.dumps({"ok": False, "error": str(exc)})
 
@@ -136,6 +158,8 @@ def register(ctx) -> None:
                              description="Pairing data for the Hermes Mobile app (used by the app itself)")
         ctx.register_command("android-credentials", credentials_command,
                              description="Install the Firebase service-account key (used by the app's upload button)")
+        ctx.register_command("android-enable", enable_command,
+                             description="Enable Android notifications for another profile (used by the app)")
         ctx.register_command("android-test", test_command, description="Send a test notification to paired phones")
         ctx.register_command("android-status", status_command,
                              description="Android notifications: setup status and next steps")

@@ -77,6 +77,7 @@ def test_secret_bearing_commands_refuse_messaging_channels(home, monkeypatch):
     monkeypatch.setattr(tools, "_is_messaging_surface", lambda: True)
     assert "secret" not in tools.pair_command("")
     assert json.loads(tools.credentials_command("e30="))["ok"] is False
+    assert json.loads(tools.enable_command("work"))["ok"] is False
 
 
 @pytest.mark.parametrize("source, messaging", [("telegram", True), ("whatsapp", True), ("mobile", False),

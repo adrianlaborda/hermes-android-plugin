@@ -375,6 +375,32 @@ def pairing_payload() -> dict[str, Any]:
     return payload
 
 
+def pairing_for(name: str = "") -> dict[str, Any]:
+    """``pairing_payload`` of profile ``name``, answered by this profile, so the app can pair a profile that
+    has no app conversation to send commands through. A profile that has not enabled the plugin says so,
+    with the key it would share."""
+    name = (name or "").strip()
+    if not name or name == profile_name():
+        return pairing_payload()
+    row = _profile_row(name)  # ValueError for an unknown profile
+    if not (row["plugin_installed"] and row["plugin_enabled"]):
+        key = _credentials_state()
+        return {"hermes_android_pairing": 1, "profile": name, "plugin_version": PLUGIN_VERSION, "ready": False,
+                "plugin_enabled": False, "problem": "plugin_not_enabled", "host_profile": profile_name(),
+                "server_key": {"state": key["state"], "project_id": key.get("project_id", ""), "shared": True},
+                "api_server": {"port": _api_server()["port"], "reachable_from_phone": True}}
+    with profile_scope(name):
+        return pairing_payload()
+
+
+def send_test_for(name: str = "") -> dict[str, Any]:
+    name = (name or "").strip()
+    if not name or name == profile_name():
+        return {"profile": profile_name(), **send_test()}
+    with profile_scope(name):
+        return {"profile": name, **send_test()}
+
+
 # ── other profiles ───────────────────────────────────────────────────────────
 
 PLUGIN_NAME = "hermes-android"
@@ -511,8 +537,48 @@ def enable_for_profile(name: str, apply: bool = False) -> dict[str, Any]:
             with contextlib.redirect_stdout(io.StringIO()):
                 set_config_value(f"platforms.{PLATFORM_NAME}.credentials_path", key_path)
                 set_config_value(f"platforms.{PLATFORM_NAME}.project_id", key_state["project_id"])
+    activation = activate_profile(name)
+    restart = activation["gateway"] != "profile_restarted"
     return {"dry_run": False, "profile": name, "done": plan, "configure": configured["changed"],
-            "now": _profile_row(name), "restart_required": True,
-            "next": ("Restart the gateway (`hermes gateway restart`). Then in the app: Notifications → "
-                     f"select profile {name} → Pair with this server.")}
+            "now": _profile_row(name), "activation": activation, "restart_required": restart,
+            "next": (("Restart the gateway (`hermes gateway restart`). Then in the app: " if restart else
+                      "It is live now, no restart needed. In the app: ") +
+                     f"Notifications → select profile {name} → Pair with this server.")}
+
+
+def activate_profile(name: str) -> dict[str, Any]:
+    """Bring the newly enabled plugin up for ``name`` without restarting the whole gateway: load it in this
+    process (the chat backend: commands and hooks for open chats) and in the gateway, then restart only
+    that profile in the multiplexing gateway so its ``hermes_android`` channel starts (pairing endpoint,
+    cron delivery). Other profiles and their channels keep running. Never raises."""
+    result: dict[str, Any] = {"loaded_here": False, "gateway": "restart_required"}
+    try:
+        from hermes_cli.plugins_activation import activate_plugin_now
+        with profile_scope(name):
+            result["loaded_here"] = activate_plugin_now(PLUGIN_NAME).get("activation") is not None
+    except Exception as exc:
+        result["load_error"] = str(exc)
+    try:
+        from gateway.control_socket import query_gateway_control
+        from hermes_constants import get_default_hermes_root
+        root = Path(get_default_hermes_root())
+        down = query_gateway_control(root, "unserve-profile", params={"name": name}, timeout=30)
+        if not down or down.get("error"):
+            # Not multiplexed, the launch profile, or no gateway: a full restart is the only way.
+            result["gateway_detail"] = (down or {}).get("error", "no gateway answered")
+            return result
+        for _ in range(40):
+            up = query_gateway_control(root, "serve-profile", params={"name": name}, timeout=30) or {}
+            if up.get("served") or up.get("pending"):
+                result["gateway"] = "profile_restarted"
+                return result
+            if "already served" not in str(up.get("error", "")):
+                result["gateway_detail"] = up.get("error", "no answer")
+                break
+            time.sleep(0.5)  # the previous instance is still tearing down
+        # Never leave the profile unserved: the gateway's profile reconcile serves it again.
+        query_gateway_control(root, "rescan-profiles", timeout=30)
+    except Exception as exc:
+        result["gateway_detail"] = str(exc)
+    return result
 
