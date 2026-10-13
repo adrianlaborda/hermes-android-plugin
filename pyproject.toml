@@ -12,6 +12,9 @@ dependencies = ["httpx>=0.28,<0.29", "PyJWT[crypto]>=2.13,<3"]
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio", "aiohttp"]
 
+[tool.setuptools]
+packages = ["hermes_android"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
