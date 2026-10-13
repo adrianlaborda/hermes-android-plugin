@@ -79,6 +79,16 @@ def test_secret_bearing_commands_refuse_messaging_channels(home, monkeypatch):
     assert json.loads(tools.credentials_command("e30="))["ok"] is False
 
 
+@pytest.mark.parametrize("source, messaging", [("telegram", True), ("whatsapp", True), ("mobile", False),
+                                               ("desktop", False), ("tui", False), ("", False)])
+def test_the_app_is_not_a_messaging_surface(monkeypatch, source, messaging):
+    from gateway import session_context
+    monkeypatch.delenv("HERMES_PLATFORM", raising=False)
+    monkeypatch.setattr(session_context, "get_session_env",
+                        lambda name, default="": source if name == "HERMES_SESSION_SOURCE" else default)
+    assert tools._is_messaging_surface() is messaging
+
+
 def test_tool_handlers_wrap_errors_as_json(home):
     handler = dict((schema["name"], handler) for schema, handler, _ in tools.TOOLS)["hermes_android_install_credentials"]
     reply = json.loads(handler({"path": "/nonexistent/key.json"}))

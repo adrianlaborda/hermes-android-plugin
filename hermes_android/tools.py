@@ -8,6 +8,7 @@ to answer inside messaging channels such as Telegram, where the reply would be p
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable
 
 from . import setup
@@ -74,12 +75,20 @@ TOOLS = (
 )
 
 
+# Hermes Mobile's own conversations (source "mobile") run over the same authenticated WebSocket as Desktop's;
+# Hermes core does not list that source among its non-messaging surfaces, so it is allowed here.
+APP_SURFACES = frozenset({"mobile"})
+
+
 def _is_messaging_surface() -> bool:
+    """True inside a human messaging channel (Telegram…), where a reply would be posted to a chat."""
     try:
-        from gateway.session_context import session_is_messaging_surface
-        return session_is_messaging_surface()
+        from gateway.session_context import NON_MESSAGING_SESSION_SURFACES, get_session_env
     except Exception:
         return False
+    platform = os.getenv("HERMES_PLATFORM") or get_session_env("HERMES_SESSION_PLATFORM", "")
+    idents = (str(v or "").strip().lower() for v in (platform, get_session_env("HERMES_SESSION_SOURCE", "")))
+    return any(ident and ident not in NON_MESSAGING_SESSION_SURFACES | APP_SURFACES for ident in idents)
 
 
 def pair_command(_raw: str = "") -> str:
