@@ -10,7 +10,7 @@ The tests import Hermes Agent from source, so check it out next to the plugin:
 ```sh
 git clone https://github.com/NousResearch/hermes-agent ../hermes-agent
 python -m venv .venv && . .venv/bin/activate
-pip install -e '.[test]' ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
+pip install -e '.[test]' pyyaml ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
 HERMES_AGENT_SRC=../hermes-agent python -m pytest tests -q
 ```
 

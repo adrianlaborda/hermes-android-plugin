@@ -42,7 +42,7 @@ jobs:
 
       - name: Test
         run: |
-          python -m pip install -e '.[test]' ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
+          python -m pip install -e '.[test]' pyyaml ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
           python -m pytest tests -q
         env:
           HERMES_AGENT_SRC: ${{ github.workspace }}/.upstream/hermes-agent

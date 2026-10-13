@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e '.[test]' ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
+      - run: python -m pip install -e '.[test]' pyyaml ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
       - run: python -m pytest tests -q
         env:
           HERMES_AGENT_SRC: ${{ github.workspace }}/.upstream/hermes-agent
