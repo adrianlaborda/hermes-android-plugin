@@ -115,9 +115,16 @@ agree. Jobs created directly in the dashboard need `hermes_android:home` added t
 
 ### 7. More profiles
 
-Each profile pairs separately. Ask Hermes *"enable Android notifications for the work profile"*. It calls
-`hermes_android_enable_profile`, which copies the plugin, creates that profile's secret and reuses the same Firebase
-key. Then, in the app, pick the profile in **Notifications** and tap **Pair**.
+Hermes isolates profiles, so each one has to enable the plugin and pairs separately. You install the plugin
+once. Ask Hermes, in a profile that already has it, *"enable Android notifications for the work profile"*. The app's
+**Ask Hermes** button on a profile that is not enabled does exactly that. Hermes calls `hermes_android_enable_profile`,
+which:
+
+- links the plugin into that profile, so one install and one update serve every profile;
+- creates that profile's own pairing secret;
+- points it at the same Firebase key file.
+
+After a gateway restart, pick the profile in the app's **Notifications** screen and tap **Pair**.
 
 ### What gets notified
 

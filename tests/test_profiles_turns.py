@@ -67,25 +67,55 @@ def test_excerpt_drops_markup():
     assert hooks._plain("**Done** ✅\n```py\nx=1\n```\nSee [the docs](http://x) ![img](a.png)") == "Done ✅ See the docs"
 
 
-def test_enable_profile_plans_then_applies_with_shared_key(home):
+def test_enable_profile_plans_then_links_with_shared_key(home):
     (home / "profiles" / "work").mkdir(parents=True)
     (home / "profiles" / "work" / "config.yaml").write_text("model: {}\n")
     setup.configure()
     setup.install_credentials_json(KEY)
     plan = setup.enable_for_profile("work")
-    assert plan["dry_run"] and any("copy plugin" in step for step in plan["plan"])
+    assert plan["dry_run"] and any("link the plugin" in step for step in plan["plan"])
     assert not (home / "profiles" / "work" / "plugins" / "hermes-android").exists()
     done = setup.enable_for_profile("work", apply=True)
     work = home / "profiles" / "work"
-    assert (work / "plugins" / "hermes-android" / "plugin.yaml").exists()
+    link = work / "plugins" / "hermes-android"
+    # One install serves every profile: the profile gets a link, not a copy.
+    assert link.is_symlink() and link.resolve() == setup._source_dir()
+    assert done["now"]["plugin_install"] == "link"
     assert done["now"]["plugin_enabled"] and done["now"]["platform_enabled"]
     assert done["now"]["pairing_secret"] == "ok" and done["now"]["server_key"] == "ok"
+    # The key file is shared, never duplicated into the profile.
+    assert not (work / "credentials").exists()
     assert "HERMES_ANDROID_RPC_SECRET=" in (work / ".env").read_text()
     # The work profile gets its own secret, not the default one.
     default_secret = (home / ".env").read_text().split("HERMES_ANDROID_RPC_SECRET=")[1].splitlines()[0]
     assert default_secret not in (work / ".env").read_text()
     names = [row["profile"] for row in setup.profiles_overview()["profiles"]]
     assert names[:1] == ["default"] and "work" in names
+    # Applying again changes nothing on disk.
+    again = setup.enable_for_profile("work")
+    assert not any("link" in step for step in again["plan"])
+
+
+def test_enable_profile_replaces_an_old_copy_with_a_link(home):
+    work = home / "profiles" / "work"
+    copy = work / "plugins" / "hermes-android"
+    copy.mkdir(parents=True)
+    (work / "config.yaml").write_text("model: {}\n")
+    (copy / "plugin.yaml").write_text("name: hermes-android\nversion: 0.5.0\n")
+    plan = setup.enable_for_profile("work")
+    assert any("separate copy (version 0.5.0)" in step for step in plan["plan"])
+    setup.enable_for_profile("work", apply=True)
+    assert copy.is_symlink()
+    backups = list(work.glob("plugins-backup-hermes-android-0.5.0-*"))
+    assert len(backups) == 1 and (backups[0] / "plugin.yaml").exists()
+
+
+def test_enable_profile_leaves_foreign_dirs_alone(home):
+    work = home / "profiles" / "work"
+    (work / "plugins" / "hermes-android").mkdir(parents=True)
+    (work / "config.yaml").write_text("model: {}\n")
+    result = setup.enable_for_profile("work", apply=True)
+    assert "error" in result and not (work / "plugins" / "hermes-android").is_symlink()
 
 
 def test_unknown_profile_is_refused(home):

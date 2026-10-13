@@ -60,8 +60,9 @@ TOOLS = (
              "pairing secret, Firebase key, paired devices. Use it when the user asks which profiles use the app."),
      _wrap(lambda a: setup.profiles_overview()), "👥"),
     (_schema("hermes_android_enable_profile",
-             "Let another profile use the Android app: copies this plugin there, enables it, creates its pairing secret, "
-             "configures the platform and reuses this profile's Firebase key. Call with apply=false to show the plan, "
+             "Let another profile use the Android app: links this plugin into it (one install serves every profile; an old "
+             "separate copy is replaced and kept as a backup), enables it, creates its own pairing secret, configures the "
+             "platform and points it at this profile's Firebase key file. Call with apply=false to show the plan, "
              "then apply=true only after the user confirms. A gateway restart is needed afterwards.",
              {"profile": {"type": "string", "description": "Profile name, as listed by hermes_android_profiles"},
               "apply": {"type": "boolean", "description": "false = show the plan (default); true = do it"}},

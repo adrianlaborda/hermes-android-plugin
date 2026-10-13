@@ -13,6 +13,7 @@ import json
 import os
 import secrets
 import stat
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +23,7 @@ SECRET_ENV = "HERMES_ANDROID_RPC_SECRET"
 MIN_SECRET_LENGTH = 32
 DEFAULT_API_SERVER_PORT = 8642
 CREDENTIALS_FILE = "fcm-service-account.json"
-PLUGIN_VERSION = "0.5.0"
+PLUGIN_VERSION = "0.5.1"
 MAX_KEY_BYTES = 64 * 1024
 
 
@@ -399,10 +400,37 @@ def _plugin_enabled_in_config() -> bool:
     return PLUGIN_NAME in (plugins.get("enabled") or []) and PLUGIN_NAME not in (plugins.get("disabled") or [])
 
 
+def _plugin_link_state(target: Path, source: Path) -> dict[str, Any]:
+    """How profile plugin dir ``target`` relates to this install: ``link`` (follows it), ``other_link``,
+    ``copy`` (a separate tree that updates stop reaching), ``foreign`` or ``missing``."""
+    if target.is_symlink():
+        try:
+            same = target.resolve() == source
+        except OSError:
+            same = False
+        return {"kind": "link" if same else "other_link"}
+    if not target.exists():
+        return {"kind": "missing"}
+    manifest = target / "plugin.yaml"
+    if not manifest.exists():
+        return {"kind": "foreign"}
+    version = ""
+    for line in manifest.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("version:"):
+            version = line.split(":", 1)[1].strip()
+    return {"kind": "copy", "version": version}
+
+
+def _source_dir() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
 def _profile_row(name: str) -> dict[str, Any]:
     with profile_scope(name):
-        installed = (_home() / "plugins" / PLUGIN_NAME / "plugin.yaml").exists()
+        target = _home() / "plugins" / PLUGIN_NAME
+        installed = (target / "plugin.yaml").exists()
         row: dict[str, Any] = {"profile": name, "plugin_installed": installed,
+                               "plugin_install": _plugin_link_state(target, _source_dir())["kind"],
                                "plugin_enabled": _plugin_enabled_in_config()}
         if installed:
             cfg = _platform_config()
@@ -429,36 +457,47 @@ def profiles_overview() -> dict[str, Any]:
 
 
 def enable_for_profile(name: str, apply: bool = False) -> dict[str, Any]:
-    """Make ``name`` usable from the app: install this plugin there, enable it, create its secret,
-    configure the platform and reuse this profile's Firebase service-account key (the phone has a
-    single Firebase project, so every profile must send through the same one)."""
+    """Make ``name`` usable from the app: link this plugin into the profile (one install serves every
+    profile, so an update reaches all of them), enable it, create the profile's own pairing secret,
+    configure the platform and point it at this profile's Firebase service-account key (the phone has
+    a single Firebase project, so every profile sends through the same key file)."""
     from hermes_cli.config import load_config, save_config
-    source_dir = Path(__file__).resolve().parent.parent
+    from hermes_cli.profiles import get_profile_dir, profile_exists
+    if not profile_exists(name):
+        raise ValueError(f"Unknown profile: {name}")
+    source_dir = _source_dir()
+    target = Path(get_profile_dir(name)) / "plugins" / PLUGIN_NAME
+    link = _plugin_link_state(target, source_dir)
     key_state = _credentials_state()
-    key_raw = None
-    if key_state["state"] == "ok":
-        with open(key_state["path"], encoding="utf-8") as handle:
-            key_raw = json.load(handle)
+    key_path = str(Path(key_state["path"]).resolve()) if key_state["state"] == "ok" else ""
     before = _profile_row(name)
     plan = []
-    if not before["plugin_installed"]:
-        plan.append(f"copy plugin {PLUGIN_VERSION} into the profile")
+    if link["kind"] == "missing":
+        plan.append(f"link the plugin into the profile (it follows this install, {PLUGIN_VERSION})")
+    elif link["kind"] == "copy":
+        plan.append(f"replace the profile's separate copy (version {link.get('version') or '?'}) with a link to "
+                    f"this install ({PLUGIN_VERSION}); the copy is kept as a backup outside the plugins folder")
+    elif link["kind"] in ("other_link", "foreign"):
+        return {"dry_run": True, "profile": name, "plan": [], "current": before,
+                "error": f"{target} exists and is not this plugin. Leave it alone and ask the user."}
     if not before["plugin_enabled"]:
         plan.append("enable the plugin in the profile's config")
-    plan.append("enable the hermes_android platform and create its pairing secret (if missing)")
-    if key_raw is not None and before.get("server_key") != "ok":
-        plan.append(f"install the Firebase key of project {key_state['project_id']} (same as this profile)")
-    elif key_raw is None and before.get("server_key") != "ok":
+    plan.append("enable the hermes_android platform and create the profile's own pairing secret (if missing)")
+    if key_path and before.get("server_key") != "ok":
+        plan.append(f"use the same Firebase key file as this profile (project {key_state['project_id']}); "
+                    "nothing is uploaded again")
+    elif not key_path and before.get("server_key") != "ok":
         plan.append("no Firebase key to reuse: upload one from the app for that profile")
     if not apply:
         return {"dry_run": True, "profile": name, "plan": plan, "current": before,
                 "next": "Confirm with the user, then call again with apply=true. A gateway restart follows."}
-    import shutil
+    if link["kind"] == "copy":
+        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        target.rename(target.parent.parent / f"plugins-backup-{PLUGIN_NAME}-{link.get('version') or 'copy'}-{stamp}")
+    if link["kind"] in ("missing", "copy"):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(source_dir, target_is_directory=True)
     with profile_scope(name):
-        target = _home() / "plugins" / PLUGIN_NAME
-        if not (target / "plugin.yaml").exists():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(source_dir, target, ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache"))
         cfg = load_config() or {}
         plugins = cfg.setdefault("plugins", {})
         enabled = [p for p in (plugins.get("enabled") or []) if p != PLUGIN_NAME] + [PLUGIN_NAME]
@@ -467,8 +506,11 @@ def enable_for_profile(name: str, apply: bool = False) -> dict[str, Any]:
         with contextlib.redirect_stdout(io.StringIO()):
             save_config(cfg, merge_existing=True)
         configured = configure()
-        if key_raw is not None and _credentials_state()["state"] != "ok":
-            install_credentials_json(key_raw)
+        if key_path and _credentials_state()["state"] != "ok":
+            from hermes_cli.config import set_config_value
+            with contextlib.redirect_stdout(io.StringIO()):
+                set_config_value(f"platforms.{PLATFORM_NAME}.credentials_path", key_path)
+                set_config_value(f"platforms.{PLATFORM_NAME}.project_id", key_state["project_id"])
     return {"dry_run": False, "profile": name, "done": plan, "configure": configured["changed"],
             "now": _profile_row(name), "restart_required": True,
             "next": ("Restart the gateway (`hermes gateway restart`). Then in the app: Notifications → "

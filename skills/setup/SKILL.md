@@ -78,13 +78,17 @@ to the next step. Keep instructions short and concrete. The user is probably on 
 
 ## Other profiles
 
-Each Hermes profile has its own plugin install, pairing secret, inbox and devices. When the user asks to use
-the app with another profile (for example "activate notifications for my work profile"):
+Hermes isolates profiles: each one enables its own plugins and has its own pairing secret, inbox, devices and
+cron jobs. The plugin is installed once and linked into each profile, so an update reaches all of them, and every
+profile sends through the same Firebase key file. The app's Notifications screen sends the user here when a
+profile is not enabled yet. When the user asks to use the app with another profile (for example "activate
+notifications for my work profile"):
 
 1. Call `hermes_android_profiles` to show the current state of every profile.
 2. Call `hermes_android_enable_profile` with `profile=<name>` and `apply=false`, show the plan, and apply with
-   `apply=true` once the user confirms. It reuses this profile's Firebase key, because the phone has a single
-   Firebase project.
+   `apply=true` once the user confirms. It links the plugin (an old separate copy is replaced and kept as a
+   backup) and points the profile at this profile's Firebase key, because the phone has a single Firebase
+   project. Nothing has to be uploaded again.
 3. Restart the gateway (with consent).
 4. In the app, the user opens **Notifications**, picks that profile at the top and taps **Pair with this server**.
 5. Optionally call `hermes_android_route_crons` with `profile=<name>` to route that profile's scheduled jobs.
