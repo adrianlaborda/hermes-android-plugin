@@ -14,7 +14,7 @@ pip install -e '.[test]' pyyaml ruamel.yaml python-dotenv rich croniter platform
 HERMES_AGENT_SRC=../hermes-agent python -m pytest tests -q
 ```
 
-CI runs the tests on Python 3.11 and 3.13, against the tested Hermes Agent release and against `main`.
+CI runs the tests on Python 3.11 and 3.14, against the tested Hermes Agent release and against `main`.
 
 ## Conventions
 
@@ -28,7 +28,7 @@ CI runs the tests on Python 3.11 and 3.13, against the tested Hermes Agent relea
 
 Maintainers release by:
 1. Moving the `Unreleased` entries under a new version heading.
-2. Bumping `version` in both `plugin.yaml` and `pyproject.toml`.
+2. Bumping the version in `plugin.yaml`, `pyproject.toml` and `PLUGIN_VERSION` in `hermes_android/setup.py`.
 3. Pushing a tag `vX.Y.Z`.
 
 The release workflow then tests and publishes the GitHub release.

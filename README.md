@@ -3,7 +3,7 @@
 [![CI](https://github.com/adrianlaborda/hermes-android-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/adrianlaborda/hermes-android-plugin/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/adrianlaborda/hermes-android-plugin?sort=semver)](https://github.com/adrianlaborda/hermes-android-plugin/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Python 3.11–3.13](https://img.shields.io/badge/python-3.11%E2%80%933.13-3776AB)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)
 
 Push notifications from your own [Hermes Agent](https://github.com/NousResearch/hermes-agent) to the
 [Hermes Mobile](https://github.com/adrianlaborda/hermes-mobile) Android app: reminders, scheduled jobs, finished turns
@@ -13,7 +13,7 @@ plugin, with no fork or patch of Hermes core.
 
 > **Unofficial.** This is a community project. It is not affiliated with or endorsed by Nous Research.
 
-**Requirements:** Hermes Agent with platform HTTP callbacks (tested on v0.21.5) and Python 3.11–3.13. Changes are
+**Requirements:** Hermes Agent with platform HTTP callbacks (tested on v0.21.7) and Python 3.11 or later. Changes are
 listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start: let Hermes do it

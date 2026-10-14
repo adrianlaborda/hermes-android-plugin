@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hermes-android-plugin"
-version = "0.5.1"
+version = "0.5.2"
 description = "Hermes Android durable Android inbox platform plugin"
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 dependencies = ["httpx>=0.28,<0.29", "PyJWT[crypto]>=2.13,<3"]
 
 [project.optional-dependencies]

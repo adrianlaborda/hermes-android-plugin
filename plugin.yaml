@@ -1,7 +1,7 @@
 name: hermes-android
 label: Hermes Android
 kind: platform
-version: 0.5.1
+version: 0.5.2
 description: Durable Android device inbox and BYO Firebase HTTP v1 delivery for Hermes.
 optional_env:
   - name: HERMES_ANDROID_RPC_SECRET

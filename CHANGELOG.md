@@ -6,6 +6,13 @@ All notable changes to the `hermes-android` plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-14
+
+### Fixed
+
+- Newer Hermes Agent releases build each plugin's environment with Python 3.14. The plugin declared
+  `requires-python < 3.14`, so Hermes refused it and disabled it on update. It now supports Python 3.11 and later.
+
 ## [0.5.1] - 2026-10-13
 
 First public release.
@@ -66,5 +73,6 @@ First public release.
 
 - New conversational `cronjob` requests also deliver to the phone, through the `tool_request` middleware.
 
-[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.2
 [0.5.1]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.1
