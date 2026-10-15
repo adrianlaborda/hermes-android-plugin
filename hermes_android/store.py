@@ -277,7 +277,7 @@ class DeviceStore:
             if dedup_key:
                 old = conn.execute("SELECT * FROM events WHERE device_id=? AND dedup_key=?", (device_id, dedup_key)).fetchone()
                 if old is not None:
-                    return self._public_event(old)
+                    return {**self._public_event(old), "deduplicated": True}
             event_id = str(uuid.uuid4())
             conn.execute(
                 "INSERT INTO events(event_id,device_id,event_type,title,body,priority,source,source_id,session_id,dedup_key,state,created_at,available_at,expires_at) "
@@ -286,6 +286,18 @@ class DeviceStore:
                  now, now, expires_at or now + EVENT_TTL_SECONDS),
             )
             return self._public_event(conn.execute("SELECT * FROM events WHERE event_id=?", (event_id,)).fetchone())
+
+    def withdraw(self, device_id: str, dedup_key: str) -> dict[str, Any] | None:
+        """Retire a notice that no longer applies (an approval answered elsewhere): it will not be pushed or listed
+        again. Returns the row as it was, so the caller can tell whether the phone already got it."""
+        with self._transaction() as conn:
+            row = conn.execute("SELECT * FROM events WHERE device_id=? AND dedup_key=?", (device_id, dedup_key)).fetchone()
+            if row is None:
+                return None
+            if row["state"] not in {"acked", "expired"}:
+                conn.execute("UPDATE events SET state='acked', acknowledged_at=COALESCE(acknowledged_at, ?) WHERE event_id=?",
+                             (_now(), row["event_id"]))
+            return dict(row)
 
     def get_event(self, device_id: str, secret: str, event_id: str) -> dict[str, Any]:
         with self._transaction() as conn:

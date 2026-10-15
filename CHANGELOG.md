@@ -6,6 +6,21 @@ All notable changes to the `hermes-android` plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-15
+
+### Fixed
+
+- Approval notices fired for every check of Hermes' smart-approval guardian, which decides on its own. They also
+  fired for each duplicate request, so the phone kept buzzing with approvals that were never waiting for anyone. Only
+  real prompts notify now.
+- An approval answered elsewhere (Desktop, Telegram) or timed out is withdrawn from the phone.
+- A notice Hermes fired twice for the same turn or tool call is pushed once.
+
+### Added
+
+- Approval notices carry the chat title and what the action does, and open that chat.
+- `platforms.hermes_android.notify_approvals`: `all`, `non_messaging` (default) or `never`.
+
 ## [0.5.2] - 2026-10-14
 
 ### Fixed
@@ -73,6 +88,7 @@ First public release.
 
 - New conversational `cronjob` requests also deliver to the phone, through the `tool_request` middleware.
 
-[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.3
 [0.5.2]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.2
 [0.5.1]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.1

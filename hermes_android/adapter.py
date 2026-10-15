@@ -247,9 +247,10 @@ def register(ctx) -> None:
         from .reminders import route_reminder
         ctx.register_middleware("tool_request", route_reminder)
     if hasattr(ctx, "register_hook"):
-        from .hooks import on_session_end, pre_approval_request
+        from .hooks import on_session_end, post_approval_response, pre_approval_request
         ctx.register_hook("on_session_end", on_session_end)
         ctx.register_hook("pre_approval_request", pre_approval_request)
+        ctx.register_hook("post_approval_response", post_approval_response)
     from .tools import register as register_setup
     register_setup(ctx)
     if hasattr(ctx, "register_cli_command"):

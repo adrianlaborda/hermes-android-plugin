@@ -143,9 +143,11 @@ inside the multiplexing gateway. In the app, the same is one tap: on a profile t
 |---|---|---|
 | Scheduled job or reminder delivered to `hermes_android:home` | the job's output | on |
 | Finished or failed turn | chat title / excerpt of the answer | on for app, Desktop and API turns; off for Telegram-like channels, which already notify you |
-| Approval request | generic | on |
+| Approval request waiting for you | chat title / what the action does | on for app, Desktop and API sessions; off for Telegram-like channels, which show the buttons themselves |
 
-`platforms.hermes_android.notify_turns: all | non_messaging | never` controls turn notices.
+`platforms.hermes_android.notify_turns` and `notify_approvals` (`all | non_messaging | never`) control turn and
+approval notices. Hermes' smart-approval checks never notify: its guardian decides those on its own. When an approval is
+answered anywhere or times out, its notice disappears from the phone.
 
 Only an opaque event ID travels through FCM; the phone fetches the content from your server. Showing it on the lock
 screen is a setting in the app.
@@ -192,8 +194,8 @@ first two refuse to answer in messaging channels such as Telegram.
   from any surface. Jobs that already exist, and jobs created directly in the dashboard or the scheduler API, are not
   changed. Route them with `hermes_android_route_crons`, or add `hermes_android:home` to their delivery. Explicit
   `local` delivery stays local. Set `platforms.hermes_android.mirror_reminders: false` to stop routing new jobs.
-- **Approvals.** The hook exposes a runtime session key, not a stored chat ID, so an approval notice opens the app
-  without a chat link.
+- **Approvals.** Tapping an approval notice opens its chat, where the pending approval is replayed. Approvals from
+  scheduled jobs have no chat to open.
 - **Delivery.** Up to 3 push attempts, each with bounded HTTP retries. Undelivered events stay in the inbox for 7 days,
   and the phone picks them up when the app opens. Stable notification IDs and acknowledgements suppress duplicates.
 - **Android.** Notifications depend on Google Play services, the app's permission and channel settings, and battery

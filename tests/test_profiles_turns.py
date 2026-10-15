@@ -158,3 +158,55 @@ def test_enable_command_needs_a_profile(home):
 def test_unknown_profile_is_refused(home):
     with pytest.raises(ValueError):
         setup.enable_for_profile("ghost")
+
+
+def _pending(device):
+    return DeviceStore().pending(device["device_id"], device["device_secret"])
+
+
+def test_guardian_prechecks_and_duplicates_do_not_notify(home, pushed):
+    device = _device()
+    # Smart approvals: the hook fires before the guardian decides, and it usually decides alone.
+    hooks.pre_approval_request(session_key="k", surface="smart", command="rm -rf build", tool_call_id="c1")
+    hooks.post_approval_response(session_key="k", surface="smart", command="rm -rf build", tool_call_id="c1", choice="smart_approve")
+    # A follower waiting on an identical pending prompt.
+    hooks.pre_approval_request(session_key="k", surface="gateway", coalesced=True, command="rm -rf build", tool_call_id="c2")
+    assert _pending(device) == [] and pushed == []
+
+
+def test_real_prompt_notifies_once_with_its_chat(home, pushed, monkeypatch):
+    device = _device()
+    monkeypatch.setattr(hooks, "_session_platform", lambda sid: "desktop")
+    for _ in range(2):  # Hermes may re-fire for the same tool call
+        hooks.pre_approval_request(session_key="k", surface="gateway", session_id="s1", tool_call_id="c1",
+                                   command="rm -rf build", description="recursive **delete**")
+    [event] = _pending(device)
+    assert event["event_type"] == "approval_required" and event["session_id"] == "s1"
+    assert event["title"] == "Plan the trip" and event["body"].endswith(": recursive delete")
+    assert pushed == [event["event_id"]]
+
+
+def test_messaging_approvals_stay_in_their_channel(home, pushed, monkeypatch):
+    device = _device()
+    monkeypatch.setattr(hooks, "_session_platform", lambda sid: "telegram")
+    hooks.pre_approval_request(session_key="k", surface="gateway", session_id="s1", tool_call_id="c1")
+    assert _pending(device) == []
+
+
+def test_an_answered_approval_is_withdrawn(home, pushed, monkeypatch):
+    device = _device()
+    monkeypatch.setattr(hooks, "_session_platform", lambda sid: "desktop")
+    hooks.pre_approval_request(session_key="k", surface="gateway", session_id="s1", tool_call_id="c1")
+    # Answered before the push went out: it just disappears.
+    hooks.post_approval_response(session_key="k", surface="gateway", tool_call_id="c1", choice="once")
+    assert _pending(device) == []
+
+    hooks.pre_approval_request(session_key="k", surface="gateway", session_id="s1", tool_call_id="c2")
+    [notice] = _pending(device)
+    store = DeviceStore()
+    assert store.begin_push(notice["event_id"]) is not None
+    store.finish_push(notice["event_id"], "success")
+    # Already on the phone: a resolution event tells the app to remove it.
+    hooks.post_approval_response(session_key="k", surface="gateway", tool_call_id="c2", choice="deny")
+    [resolved] = _pending(device)
+    assert resolved["event_type"] == "approval_resolved" and resolved["source_id"] == notice["event_id"]

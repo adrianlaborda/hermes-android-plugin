@@ -89,6 +89,13 @@ rows that still own events are kept for audit and referential integrity.
 `events.pending` returns ordered unacked, unexpired events including wakes that
 were already sent/delivered, so lost FCM work is recoverable.
 
+An event the server withdraws (an approval answered elsewhere) comes back from
+`event.get` as `acked`; the phone removes any notice it still shows for it. When
+the phone already had the notice, the server also sends an `approval_resolved`
+event whose `source_id` is the withdrawn event: the phone removes that notice
+and shows nothing for the resolution itself. Clients that do not know the type
+show its plain title and body ("The approval was answered.").
+
 ## Error codes
 
 `unsupported_protocol` (400), `unknown_operation` (404), `invalid_request`
