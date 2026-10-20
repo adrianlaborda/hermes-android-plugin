@@ -30,16 +30,16 @@ jobs:
           - hermes-name: main
             hermes: main
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: NousResearch/hermes-agent
           ref: ${{ matrix.hermes }}
           path: .upstream/hermes-agent
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -e '.[test]' pyyaml ruamel.yaml python-dotenv rich croniter platformdirs pydantic requests
