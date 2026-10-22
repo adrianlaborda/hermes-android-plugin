@@ -6,6 +6,26 @@ All notable changes to the `hermes-android` plugin are documented here. The form
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-22
+
+### Added
+
+- The phone is the primary channel for reminders. A reminder made outside a messaging channel (Desktop, TUI, CLI, API or
+  the app) goes to the phone only, instead of `origin`, which Hermes resolves to the first messaging home channel such
+  as Telegram. Reminders made in Telegram still notify their own chat. Turn it off with
+  `platforms.hermes_android.primary_channel: false`, or with `/android-primary-channel [profile] [on|off]`, which the
+  app can call to show and change the setting.
+
+### Fixed
+
+- Finished turns and approval requests from Hermes Mobile chats did not notify the phone with the default
+  `notify_turns: non_messaging`, because the app's chats counted as a messaging channel. They notify now.
+- Reminders were not routed to the phone on Hermes 0.22 and later, which renamed the `cronjob` tool to `cronjob_manage`.
+  They stayed on `origin`, which falls back to the first messaging home channel, such as Telegram. Both tool names are
+  routed now.
+- A reminder asked in a Hermes Mobile chat goes to the phone only. It no longer also targets `origin`, which has no
+  chat of its own in the app.
+
 ## [0.5.3] - 2026-10-15
 
 ### Fixed
@@ -88,7 +108,8 @@ First public release.
 
 - New conversational `cronjob` requests also deliver to the phone, through the `tool_request` middleware.
 
-[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/adrianlaborda/hermes-android-plugin/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.4
 [0.5.3]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.3
 [0.5.2]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.2
 [0.5.1]: https://github.com/adrianlaborda/hermes-android-plugin/releases/tag/v0.5.1

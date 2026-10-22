@@ -7,6 +7,7 @@ to answer inside messaging channels such as Telegram, where the reply would be p
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from typing import Any, Callable
@@ -129,6 +130,29 @@ def credentials_command(raw: str = "") -> str:
         return json.dumps({"ok": False, "error": str(exc)})
 
 
+def primary_channel_command(raw: str = "") -> str:
+    """``/android-primary-channel [profile] [on|off]``: report, or set, whether the phone is the primary channel
+    for reminders made outside messaging channels. Only the config key changes; no secret is read or written."""
+    from . import reminders
+    words = (raw or "").split()
+    value = None
+    if words and words[-1].lower() in {"on", "off"}:
+        value = words.pop().lower() == "on"
+    if len(words) > 1:
+        return json.dumps({"error": "usage: /android-primary-channel [profile] [on|off]"})
+    name = words[0] if words else ""
+    if value is not None and _is_messaging_surface():
+        return json.dumps({"error": "Change this from the Hermes Mobile app or ask Hermes."})
+    try:
+        with (setup.profile_scope(name) if name else contextlib.nullcontext()):
+            if value is not None:
+                setup.set_primary_channel(value)
+            enabled = reminders.primary_channel_enabled()
+            return json.dumps({"primary_channel": enabled, "profile": name or setup.profile_name()})
+    except Exception as exc:
+        return json.dumps({"error": str(exc)})
+
+
 def test_command(raw: str = "") -> str:
     try:
         return json.dumps({"ok": True, **setup.send_test_for(raw)}, default=str)
@@ -161,6 +185,8 @@ def register(ctx) -> None:
         ctx.register_command("android-enable", enable_command,
                              description="Enable Android notifications for another profile (used by the app)")
         ctx.register_command("android-test", test_command, description="Send a test notification to paired phones")
+        ctx.register_command("android-primary-channel", primary_channel_command,
+                             description="Whether the phone is the primary channel for reminders: /android-primary-channel [profile] [on|off]")
         ctx.register_command("android-status", status_command,
                              description="Android notifications: setup status and next steps")
     if hasattr(ctx, "register_skill"):

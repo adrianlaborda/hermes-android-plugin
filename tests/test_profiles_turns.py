@@ -63,6 +63,13 @@ def test_messaging_turns_stay_quiet_unless_configured(home, pushed):
     assert len(DeviceStore().pending(device["device_id"], device["device_secret"])) == 1
 
 
+def test_app_turns_notify(home, pushed):
+    # Hermes Mobile's chats run with source "mobile", which core does not list as a non-messaging surface.
+    device = _device()
+    hooks.on_session_end(session_id="s1", turn_id="t1", completed=True, platform="mobile")
+    assert len(DeviceStore().pending(device["device_id"], device["device_secret"])) == 1
+
+
 def test_excerpt_drops_markup():
     assert hooks._plain("**Done** ✅\n```py\nx=1\n```\nSee [the docs](http://x) ![img](a.png)") == "Done ✅ See the docs"
 

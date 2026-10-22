@@ -41,11 +41,13 @@ def _turn_mode(key: str = "notify_turns") -> str:
 
 
 def _is_messaging(platform) -> bool:
-    """Telegram, Discord, WhatsApp…: that channel already told the user, so the phone stays quiet."""
+    """Telegram, Discord, WhatsApp…: that channel already told the user, so the phone stays quiet.
+    Hermes Mobile's own chats (source "mobile") are not messaging: their answers are what the phone waits for."""
+    from .tools import APP_SURFACES
     name = str(platform or "").strip().lower()
     try:
         from gateway.session_context import NON_MESSAGING_SESSION_SURFACES
-        return bool(name) and name not in NON_MESSAGING_SESSION_SURFACES | {"hermes_android"}
+        return bool(name) and name not in NON_MESSAGING_SESSION_SURFACES | APP_SURFACES | {"hermes_android"}
     except Exception:
         return name in {"telegram", "discord", "whatsapp", "slack", "signal", "matrix"}
 

@@ -3,11 +3,15 @@ import pytest
 from hermes_android import reminders
 
 _actual_enabled = reminders.mobile_reminders_enabled
+_actual_primary_channel = reminders.primary_channel_enabled
 
 
 @pytest.fixture(autouse=True)
 def enabled(monkeypatch):
     monkeypatch.setattr(reminders, 'mobile_reminders_enabled', lambda: True)
+    # These cases predate the primary channel: they keep origin outside messaging. The primary-channel
+    # cases below switch it on explicitly.
+    monkeypatch.setattr(reminders, 'primary_channel_enabled', lambda: False)
 
 
 @pytest.mark.parametrize('platform', ['desktop', 'api_server', 'telegram', 'hermes_android'])
@@ -16,6 +20,20 @@ def test_new_reminder_preserves_origin_on_every_surface(platform):
     result = reminders.route_reminder(tool_name='cronjob', args=args, platform=platform)
     assert result['args'] == dict(args, deliver='origin,hermes_android:home')
     assert 'deliver' not in args
+
+
+def test_current_tool_name_is_routed():
+    result = reminders.route_reminder(tool_name='cronjob_manage', args={'action': 'create', 'schedule': 'in 2m'})
+    assert result['args']['deliver'] == 'origin,hermes_android:home'
+
+
+def test_app_reminder_goes_to_the_phone_not_a_home_channel():
+    # A Hermes Mobile chat has no origin chat: "origin" would fall back to Telegram's home channel.
+    args = {'action': 'create', 'schedule': 'in 2m', 'prompt': 'Do X'}
+    assert reminders.route_reminder(tool_name='cronjob', args=args, platform='mobile')['args']['deliver'] == 'hermes_android:home'
+    explicit = dict(args, deliver='origin,telegram:123')
+    assert reminders.route_reminder(tool_name='cronjob', args=explicit, platform='mobile')['args']['deliver'] == \
+        'telegram:123,hermes_android:home'
 
 
 @pytest.mark.parametrize('delivery', ['telegram:123:456', ['telegram:123', 'discord:456'], 'bot-chat:work'])
@@ -124,3 +142,86 @@ def test_pairing_and_config_are_profile_scoped(tmp_path, monkeypatch):
     finally:
         reset_hermes_home_override(token)
         platform_registry.unregister('hermes_android')
+
+
+@pytest.mark.parametrize('section, expected', [
+    ({}, True),
+    ({'platforms': {'hermes_android': {}}}, True),
+    ({'platforms': {'hermes_android': {'primary_channel': None}}}, True),
+    ({'platforms': {'hermes_android': {'primary_channel': True}}}, True),
+    ({'platforms': {'hermes_android': {'primary_channel': 'on'}}}, True),
+    ({'platforms': {'hermes_android': {'primary_channel': False}}}, False),
+    ({'platforms': {'hermes_android': {'primary_channel': 'false'}}}, False),
+    ({'platforms': {'hermes_android': {'primary_channel': 'off'}}}, False),
+    ({'platforms': {'hermes_android': {'primary_channel': 'No'}}}, False),
+    ({'platforms': {'hermes_android': {'primary_channel': '0'}}}, False),
+    ({'platforms': {'hermes_android': {'primary_channel': 0}}}, False),
+])
+def test_primary_channel_reader(monkeypatch, section, expected):
+    import hermes_cli.config
+    monkeypatch.setattr(hermes_cli.config, 'load_config', lambda: section)
+    assert _actual_primary_channel() is expected
+
+
+def test_primary_channel_reader_keeps_default_when_config_is_unreadable(monkeypatch):
+    import hermes_cli.config
+    def broken():
+        raise OSError('unreadable')
+    monkeypatch.setattr(hermes_cli.config, 'load_config', broken)
+    assert _actual_primary_channel() is True
+
+
+@pytest.fixture
+def surface(monkeypatch):
+    """Set whether the reminder is asked inside a messaging channel, and the primary-channel switch."""
+    from hermes_android import tools
+    def set_surface(messaging: bool, primary: bool):
+        monkeypatch.setattr(tools, '_is_messaging_surface', lambda: messaging)
+        monkeypatch.setattr(reminders, 'primary_channel_enabled', lambda: primary)
+    return set_surface
+
+
+@pytest.mark.parametrize('platform', ['desktop', 'tui', 'api_server', 'cli'])
+def test_primary_channel_drops_origin_outside_messaging(surface, platform):
+    surface(messaging=False, primary=True)
+    args = {'action': 'create', 'schedule': 'in 2m', 'prompt': 'Do X'}
+    assert reminders.route_reminder(tool_name='cronjob', args=args, platform=platform)['args']['deliver'] == \
+        'hermes_android:home'
+    explicit = dict(args, deliver='origin,telegram:123')
+    assert reminders.route_reminder(tool_name='cronjob', args=explicit, platform=platform)['args']['deliver'] == \
+        'telegram:123,hermes_android:home'
+
+
+def test_primary_channel_off_keeps_origin_outside_messaging(surface):
+    surface(messaging=False, primary=False)
+    args = {'action': 'create', 'schedule': 'in 2m', 'prompt': 'Do X'}
+    assert reminders.route_reminder(tool_name='cronjob', args=args, platform='desktop')['args']['deliver'] == \
+        'origin,hermes_android:home'
+
+
+@pytest.mark.parametrize('primary', [True, False])
+def test_messaging_channel_keeps_origin_either_way(surface, primary):
+    surface(messaging=True, primary=primary)
+    args = {'action': 'create', 'schedule': 'in 2m', 'prompt': 'Do X'}
+    assert reminders.route_reminder(tool_name='cronjob', args=args, platform='telegram')['args']['deliver'] == \
+        'origin,hermes_android:home'
+
+
+@pytest.mark.parametrize('primary', [True, False])
+def test_app_chat_drops_origin_either_way(surface, primary):
+    surface(messaging=False, primary=primary)
+    args = {'action': 'create', 'schedule': 'in 2m', 'prompt': 'Do X'}
+    assert reminders.route_reminder(tool_name='cronjob', args=args, platform='mobile')['args']['deliver'] == \
+        'hermes_android:home'
+
+
+def test_primary_channel_keeps_explicit_local_and_update_rules(surface):
+    surface(messaging=False, primary=True)
+    assert reminders.route_reminder(tool_name='cronjob', args={'action': 'create', 'deliver': 'local'},
+                                    platform='desktop') is None
+    # A schedule-only edit still does not touch the stored destination.
+    assert reminders.route_reminder(tool_name='cronjob', args={'action': 'update', 'prompt': 'new'},
+                                    platform='desktop') is None
+    result = reminders.route_reminder(tool_name='cronjob', args={'action': 'update', 'deliver': 'origin',
+                                                                 'failure_deliver': 'local'}, platform='desktop')
+    assert result['args'] == {'action': 'update', 'deliver': 'hermes_android:home', 'failure_deliver': 'local'}

@@ -94,3 +94,55 @@ def test_tool_handlers_wrap_errors_as_json(home):
     handler = dict((schema["name"], handler) for schema, handler, _ in tools.TOOLS)["hermes_android_install_credentials"]
     reply = json.loads(handler({"path": "/nonexistent/key.json"}))
     assert reply["ok"] is False and "No file" in reply["error"]
+
+
+def test_primary_channel_command_reports_and_toggles(home, monkeypatch):
+    import yaml
+    monkeypatch.setattr(tools, "_is_messaging_surface", lambda: False)
+    (home / "config.yaml").write_text("model: {}\n")
+    (home / ".env").write_text("HERMES_ANDROID_RPC_SECRET=" + "s" * 40 + "\n")
+    name = setup.profile_name()
+    assert json.loads(tools.primary_channel_command("")) == {"primary_channel": True, "profile": name}
+    assert json.loads(tools.primary_channel_command("off")) == {"primary_channel": False, "profile": name}
+    assert json.loads(tools.primary_channel_command(""))["primary_channel"] is False
+    config = yaml.safe_load((home / "config.yaml").read_text())
+    assert config["model"] == {} and config["platforms"]["hermes_android"]["primary_channel"] is False
+    assert json.loads(tools.primary_channel_command("on"))["primary_channel"] is True
+    # Only the config key changes: the secret file is untouched.
+    assert (home / ".env").read_text() == "HERMES_ANDROID_RPC_SECRET=" + "s" * 40 + "\n"
+
+
+def test_primary_channel_command_targets_another_profile(home, monkeypatch):
+    import yaml
+    monkeypatch.setenv("HERMES_HOME", str(home))  # profile discovery reads the environment, not the override
+    monkeypatch.setattr(tools, "_is_messaging_surface", lambda: False)
+    work = home / "profiles" / "work"
+    work.mkdir(parents=True)
+    (work / "config.yaml").write_text("model: {}\n")
+    assert json.loads(tools.primary_channel_command("work off")) == {"primary_channel": False, "profile": "work"}
+    assert yaml.safe_load((work / "config.yaml").read_text())["platforms"]["hermes_android"]["primary_channel"] is False
+    assert json.loads(tools.primary_channel_command("work")) == {"primary_channel": False, "profile": "work"}
+    assert json.loads(tools.primary_channel_command(""))["primary_channel"] is True
+
+
+def test_primary_channel_command_errors(home, monkeypatch):
+    monkeypatch.setattr(tools, "_is_messaging_surface", lambda: False)
+    assert "error" in json.loads(tools.primary_channel_command("work maybe"))
+    assert "error" in json.loads(tools.primary_channel_command("ghost on"))
+
+
+def test_primary_channel_write_refused_in_messaging_channels(home, monkeypatch):
+    monkeypatch.setattr(tools, "_is_messaging_surface", lambda: True)
+    assert "error" in json.loads(tools.primary_channel_command("off"))
+    assert not (home / "config.yaml").exists() or "primary_channel" not in (home / "config.yaml").read_text()
+    # Reporting stays available in a messaging channel.
+    assert json.loads(tools.primary_channel_command(""))["primary_channel"] is True
+
+
+def test_primary_channel_command_is_registered(monkeypatch):
+    names = {}
+    class Context:
+        def register_command(self, name, handler, description=""):
+            names[name] = handler
+    tools.register(Context())
+    assert names["android-primary-channel"] is tools.primary_channel_command

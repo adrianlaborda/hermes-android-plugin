@@ -23,7 +23,7 @@ SECRET_ENV = "HERMES_ANDROID_RPC_SECRET"
 MIN_SECRET_LENGTH = 32
 DEFAULT_API_SERVER_PORT = 8642
 CREDENTIALS_FILE = "fcm-service-account.json"
-PLUGIN_VERSION = "0.5.3"
+PLUGIN_VERSION = "0.5.4"
 MAX_KEY_BYTES = 64 * 1024
 
 
@@ -268,6 +268,14 @@ def configure() -> dict[str, Any]:
         changed.append("home channel set")
     return {"changed": changed, "restart_required": bool(changed), "profile": profile_name(),
             "next": "Restart the gateway (`hermes gateway restart`) so the platform loads, then check hermes_android_status."}
+
+
+def set_primary_channel(enabled: bool) -> None:
+    """Write platforms.hermes_android.primary_channel into this profile's config.yaml. Only that key changes:
+    set_config_value edits the file in place, like configure() does for the platform keys."""
+    from hermes_cli.config import set_config_value as _set
+    with contextlib.redirect_stdout(io.StringIO()):
+        _set(f"platforms.{PLATFORM_NAME}.primary_channel", "true" if enabled else "false")
 
 
 def install_credentials_json(raw: Any) -> dict[str, Any]:

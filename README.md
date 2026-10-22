@@ -122,6 +122,14 @@ New reminders created by talking to Hermes notify the phone automatically. To ad
 ask Hermes to run `hermes_android_route_crons`. It lists the affected jobs first and applies the change only after you
 agree. Jobs created directly in the dashboard need `hermes_android:home` added to their delivery.
 
+The phone is the primary channel by default. A reminder made outside a messaging channel (Desktop, the TUI or CLI, the
+API, or the Hermes Mobile app) goes to the phone only, and Hermes does not fall back to a messaging home channel such as
+Telegram. A reminder made inside Telegram still notifies its own chat, and the phone too. To turn this off, set
+`platforms.hermes_android.primary_channel: false`, or in the app or a chat run
+`/android-primary-channel [profile] [on|off]`. With no `on|off` the command reports the current setting. It replies
+with JSON, `{"primary_channel": true|false, "profile": "<name>"}`, or `{"error": "..."}`. Changing the setting from a
+messaging channel is refused.
+
 ### 7. More profiles
 
 Hermes isolates profiles, so each one has to enable the plugin and pairs separately. You install the plugin
@@ -171,14 +179,16 @@ If you are an AI agent asked to set this up:
 
 Slash commands: `/android-status` gives a human-readable status. `/android-pair`, `/android-credentials` and
 `/android-test` are called by the app over `command.dispatch`, whose output never enters the model's history. The
-first two refuse to answer in messaging channels such as Telegram.
+first two refuse to answer in messaging channels such as Telegram. `/android-primary-channel [profile] [on|off]` reports
+or sets the primary-channel option (see step 6); it never touches secrets.
 
 ## How it works
 
 - **Extension points used:**
   - `ctx.register_platform`, and the adapter's `verify_http_event_request` / `dispatch_http_event`.
   - `on_session_end` (finished turns) and `pre_approval_request`.
-  - `tool_request` middleware, which adds the phone to new `cronjob` requests.
+  - `tool_request` middleware, which adds the phone to new `cronjob` requests (or `cronjob_manage`, on Hermes 0.22 and
+    later).
   - `register_tool`, `register_command` and `register_skill` for the guided setup.
 - **What travels through FCM:** an opaque event ID, the device ID and the protocol version, nothing else. The phone
   shows a private generic notice, then fetches the content from the inbox over the API server.
@@ -190,10 +200,13 @@ first two refuse to answer in messaging channels such as Telegram.
 
 ## Limits
 
-- **Scheduled jobs.** The plugin adds the phone to new `cronjob` requests made through Hermes' normal tool pipeline,
-  from any surface. Jobs that already exist, and jobs created directly in the dashboard or the scheduler API, are not
-  changed. Route them with `hermes_android_route_crons`, or add `hermes_android:home` to their delivery. Explicit
-  `local` delivery stays local. Set `platforms.hermes_android.mirror_reminders: false` to stop routing new jobs.
+- **Scheduled jobs.** The plugin adds the phone to new `cronjob` requests (or `cronjob_manage`, on Hermes 0.22 and
+  later) made through Hermes' normal tool pipeline, from any surface. Jobs that already exist, and jobs created directly
+  in the dashboard or the scheduler API, are not changed. Route them with `hermes_android_route_crons`, or add
+  `hermes_android:home` to their delivery. Explicit `local` delivery stays local. Set
+  `platforms.hermes_android.mirror_reminders: false` to stop routing new jobs. Set
+  `platforms.hermes_android.primary_channel: false` to keep `origin` for reminders made outside messaging channels
+  (see [6. Scheduled jobs](#6-scheduled-jobs)).
 - **Approvals.** Tapping an approval notice opens its chat, where the pending approval is replayed. Approvals from
   scheduled jobs have no chat to open.
 - **Delivery.** Up to 3 push attempts, each with bounded HTTP retries. Undelivered events stay in the inbox for 7 days,
